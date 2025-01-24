@@ -43,3 +43,4 @@ void *memcpy(void *, const void *, uint);
 
 // mine
 int pingpong(void);
+int primes(void);
