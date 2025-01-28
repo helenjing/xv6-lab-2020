@@ -66,7 +66,7 @@ mycpu(void) {
 // Return the current struct proc *, or zero if none.
 struct proc*
 myproc(void) {
-  push_off();
+  push_off(); // lock relevant
   struct cpu *c = mycpu();
   struct proc *p = c->proc;
   pop_off();
@@ -294,6 +294,8 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+  np->tracemask = p->tracemask;
 
   release(&np->lock);
 
