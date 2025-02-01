@@ -75,14 +75,14 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     panic("walk");
 
   for(int level = 2; level > 0; level--) {
-    pte_t *pte = &pagetable[PX(level, va)];
-    if(*pte & PTE_V) {
+    pte_t *pte = &pagetable[PX(level, va)]; // get the right 9 bits as index of pte
+    if(*pte & PTE_V) {  // PTE_V: valid flag (mask)
       pagetable = (pagetable_t)PTE2PA(*pte);
-    } else {
+    } else {  // page is no valid, then alloc a page.
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
       memset(pagetable, 0, PGSIZE);
-      *pte = PA2PTE(pagetable) | PTE_V;
+      *pte = PA2PTE(pagetable) | PTE_V; // create a pte: va <==> pagetable
     }
   }
   return &pagetable[PX(0, va)];
@@ -439,4 +439,36 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int
+_vmprint(pagetable_t pgtbl, int lev, int index)
+{
+  if(((pte_t)(*pgtbl) & PTE_V)==0) return 0;
+  for(int i = lev; i < 3; i++){
+    if(i!=2){
+      printf(".. ");
+    }else{
+      printf("..");
+    }
+  }
+  uint64 p=(uint64)PTE2PA(*pgtbl);
+  printf("%d: pte %p pa %p\n", index, *pgtbl, p);  // how to get index?
+  if(lev==0)  return 0;
+  int ind=0;
+  for(pte_t* sp=(void*)p; sp < &((pagetable_t)p)[PGSIZE/sizeof(pte_t)]; sp++){
+    _vmprint(sp, lev-1, ind++);
+  }
+  return 0;
+}
+
+int
+vmprint(pagetable_t pagetable)
+{
+  printf("page table %p\n", pagetable);
+  int ind=0;
+  for(pte_t* sp=(void*)pagetable; sp < &pagetable[PGSIZE/sizeof(pte_t)]; sp++){
+    _vmprint(sp, 2, ind++);
+  }
+  return 0;
 }
