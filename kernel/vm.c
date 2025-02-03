@@ -289,6 +289,29 @@ freewalk(pagetable_t pagetable)
   kfree((void*)pagetable);
 }
 
+// free page tables only 
+// FIXME: what if user kernel page table, creates an entry that kernel's copy don't have.
+void
+freewalk_usr_kpgtbl(pagetable_t pagetable, int lev)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; lev && i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      freewalk_usr_kpgtbl((pagetable_t)child, lev-1);
+      pagetable[i] = 0;
+    }
+  }
+  kfree((void*)pagetable);
+}
+
+void
+uvmfree_kpgtbl(pagetable_t pagetable)
+{
+  freewalk_usr_kpgtbl(pagetable, 2);
+}
 // Free user memory pages,
 // then free page-table pages.
 void
@@ -471,4 +494,41 @@ vmprint(pagetable_t pagetable)
     _vmprint(sp, 2, ind++);
   }
   return 0;
+}
+
+void
+_copy_pagetable(pagetable_t rootpgtbl, pagetable_t pagetable, uint64 va, int lev)
+{ 
+  pte_t* pte;
+  uint64 nva;
+  uint64 pa=PTE2PA(*(pte_t*)pagetable);
+  if(lev==0){
+    mappages(rootpgtbl, va, PGSIZE, pa, PTE_FLAGS(*(pte_t*)pagetable));
+    return;
+  }
+  for(int i = 0; i < 512; i++){
+     pte = (pte_t*)((uint64)pa+sizeof(pte_t)*i);
+     if(*pte & PTE_V){
+      nva = va | (i << (9*lev+PGSHIFT-9));
+      _copy_pagetable(rootpgtbl, pte, nva, lev-1);
+     }
+  }
+}
+pagetable_t
+copykpagetable(void)
+{
+  pagetable_t nkpgtbl;
+  pte_t* pte;
+  nkpgtbl = (pagetable_t) kalloc();
+  if(nkpgtbl==0)  return 0;
+  memset(nkpgtbl, 0, PGSIZE);
+  for(int i = 0; i < 512; i++){
+    pte = (pte_t*)((uint64)kernel_pagetable+sizeof(pte_t)*i);
+     if(*pte & PTE_V){
+      _copy_pagetable(nkpgtbl, pte, ((uint64)i<<(18+PGSHIFT)), 2);
+     }
+    
+  }
+  
+  return nkpgtbl;
 }
